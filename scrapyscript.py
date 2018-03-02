@@ -1,20 +1,15 @@
 '''
 Run scrapy spiders from a script.
 
-Blocks and runs all requests in parallel.  Accumulated items from all
+Blocks and runs all requests in parallel.
 spiders are returned as a list.
 '''
 
 import collections
-import inspect
 from billiard import Process  # fork of multiprocessing that works with celery
-from billiard.queues import Queue
 
-from pydispatch import dispatcher
-from scrapy import signals
 from scrapy.crawler import CrawlerProcess
 from scrapy.settings import Settings
-from scrapy.spiders import Spider
 
 
 class ScrapyScriptException(Exception):
@@ -48,13 +43,7 @@ class Processor(Process):
         '''
         kwargs = {'ctx': __import__('billiard.synchronize')}
 
-        self.results = Queue(**kwargs)
-        self.items = []
         self.settings = settings or Settings()
-        dispatcher.connect(self._item_passed, signals.item_passed)
-
-    def _item_passed(self, item):
-        self.items.append(item)
 
     def _crawl(self, requests):
         '''
@@ -70,17 +59,13 @@ class Processor(Process):
 
         self.crawler.start()
         self.crawler.stop()
-        self.results.put(self.items)
 
     def run(self, jobs):
-        '''Start the Scrapy engine, and execute all jobs.  Return consolidated results
-        in a single list.
+        '''Start the Scrapy engine, and execute all jobs.
 
         Parms:
           jobs ([Job]) - one or more Job objects to be processed.
 
-        Returns:
-          List of objects yielded by the spiders after all jobs have run.
         '''
         if not isinstance(jobs, collections.Iterable):
             jobs = [jobs]
@@ -90,8 +75,6 @@ class Processor(Process):
         p.start()
         p.join()
         p.terminate()
-
-        return self.results.get()
 
     def validate(self, jobs):
         if not all([isinstance(x, Job) for x in jobs]):
